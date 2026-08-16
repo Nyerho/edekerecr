@@ -48,8 +48,13 @@ function getDateKey(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function saveToStorage(key, data) {
+function saveToStorage(key, data, skipEvent = false) {
   localStorage.setItem(key, JSON.stringify(data));
+  if (!skipEvent) {
+    try {
+      window.dispatchEvent(new CustomEvent('er-local-change', { detail: { key, data } }));
+    } catch (e) {}
+  }
 }
 
 function loadFromStorage(key, defaultValue) {
@@ -62,6 +67,235 @@ function loadFromStorage(key, defaultValue) {
     }
   }
   return defaultValue;
+}
+
+let realtimeListenersBound = false;
+const activeFirestoreUnsubs = [];
+const lastDataHash = { products: '', sales: '', shifts: '', logo: '', auth: '' };
+
+function fastHash(obj) {
+  try {
+    const str = JSON.stringify(obj || '');
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = ((h << 5) - h) + str.charCodeAt(i);
+      h |= 0;
+    }
+    return String(h);
+  } catch (e) { return Math.random().toString(); }
+}
+
+function rerenderUIs(changes) {
+  const hasProducts = changes.includes('products');
+  const hasShifts = changes.includes('shifts');
+  const hasSales = changes.includes('sales');
+  const hasLogo = changes.includes('logo');
+  const hasAuth = changes.includes('auth');
+
+  if (hasLogo) {
+    const logoUpload = document.getElementById('logoUpload');
+    if (logoUpload) {
+      const src = loadFromStorage(STORAGE_KEYS.LOGO, null) || getDefaultLogo();
+      if (src) {
+        logoUpload.innerHTML = `<img src="${src}" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;" onerror="this.outerHTML='🏪'">`;
+      }
+    }
+    const loginLogo = document.querySelector('.login-container .login-card img');
+    if (loginLogo) {
+      loginLogo.src = getLogoSrc();
+    }
+    renderGlobalFooter();
+  }
+
+  if (document.getElementById('adminTableBody') && (hasProducts || hasShifts || hasSales || hasAuth)) {
+    if (typeof renderAllAdminUI === 'function') renderAllAdminUI();
+  } else {
+    if (hasSales || hasShifts) {
+      if (typeof renderAnalytics === 'function' && document.getElementById('topProductsBody')) renderAnalytics();
+    }
+    if (hasShifts) {
+      if (typeof renderShiftsHistory === 'function' && document.getElementById('shiftsHistoryBody')) renderShiftsHistory();
+    }
+    if (hasSales) {
+      if (typeof renderSalesHistoryTable === 'function' && document.getElementById('salesHistoryBody')) renderSalesHistoryTable();
+    }
+  }
+
+  if (hasProducts) {
+    if (document.getElementById('products-container') && typeof renderProducts === 'function') {
+      const tab = document.querySelector('.nav-tabs .nav-link.active');
+      if (tab) {
+        const active = tab.textContent.includes('Chicken') ? 'Chicken' : 'Fish';
+        renderProducts(active);
+      } else {
+        renderProducts('Chicken');
+      }
+    }
+    if (document.getElementById('cart-items') && typeof renderCart === 'function' && typeof updateCartCount === 'function') {
+      renderCart();
+      updateCartCount();
+    }
+  }
+
+  if (hasAuth && typeof setupAuthUI === 'function') {
+    setupAuthUI();
+  }
+
+  if ((hasProducts || hasShifts || hasSales) && document.getElementById('products-container')) {
+    if (typeof updateSalesPageShiftStatus === 'function') updateSalesPageShiftStatus();
+  }
+}
+
+function handleDataChange(key, dataFromEvent) {
+  if (!key || !Object.values(STORAGE_KEYS).includes(key)) return;
+  const mapping = {
+    [STORAGE_KEYS.PRODUCTS]: 'products',
+    [STORAGE_KEYS.SALES]: 'sales',
+    [STORAGE_KEYS.SHIFTS]: 'shifts',
+    [STORAGE_KEYS.LOGO]: 'logo',
+    [STORAGE_KEYS.AUTH_USER]: 'auth',
+  };
+  const type = mapping[key];
+  if (!type) return;
+
+  const fresh = dataFromEvent != null ? dataFromEvent : loadFromStorage(key, null);
+  const newHash = fastHash(fresh);
+  if (lastDataHash[type] === newHash) return;
+  lastDataHash[type] = newHash;
+
+  if (key === STORAGE_KEYS.PRODUCTS && fresh) products = fresh;
+  if (key === STORAGE_KEYS.SALES && Array.isArray(fresh)) salesHistory = fresh;
+  if (key === STORAGE_KEYS.SHIFTS && Array.isArray(fresh)) shiftsHistory = fresh;
+  if (key === STORAGE_KEYS.AUTH_USER) currentUser = fresh;
+
+  rerenderUIs([type]);
+}
+
+function registerRealtimeListeners() {
+  if (realtimeListenersBound) return;
+  realtimeListenersBound = true;
+
+  window.addEventListener('storage', (e) => {
+    if (!e.key) return;
+    let data = null;
+    try { data = e.newValue ? JSON.parse(e.newValue) : null; } catch (_) {}
+    handleDataChange(e.key, data);
+  });
+
+  window.addEventListener('er-local-change', (e) => {
+    const d = e.detail || {};
+    handleDataChange(d.key, d.data);
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      Object.values(STORAGE_KEYS).forEach(k => {
+        const mapping = {
+          [STORAGE_KEYS.PRODUCTS]: 'products',
+          [STORAGE_KEYS.SALES]: 'sales',
+          [STORAGE_KEYS.SHIFTS]: 'shifts',
+          [STORAGE_KEYS.LOGO]: 'logo',
+          [STORAGE_KEYS.AUTH_USER]: 'auth',
+        };
+        const t = mapping[k];
+        if (!t) return;
+        const fresh = loadFromStorage(k, null);
+        if (t === 'products' && fresh) products = fresh;
+        if (t === 'sales' && Array.isArray(fresh)) salesHistory = fresh;
+        if (t === 'shifts' && Array.isArray(fresh)) shiftsHistory = fresh;
+        if (t === 'auth') currentUser = fresh;
+        rerenderUIs([t]);
+      });
+    }
+  });
+
+  const startFirestoreSnapshots = () => {
+    if (!isFirestoreReady) return;
+    try {
+      const prodsRef = firestoreDb.collection('products');
+      activeFirestoreUnsubs.push(prodsRef.onSnapshot((snap) => {
+        if (!snap || snap.empty) return;
+        const list = snap.docs.map(d => ({ id: Number(d.id) || d.id, ...d.data() })).filter(Boolean);
+        if (list.length === 0) return;
+        products = list;
+        saveToStorage(STORAGE_KEYS.PRODUCTS, products, true);
+        const h = fastHash(products);
+        if (lastDataHash.products !== h) {
+          lastDataHash.products = h;
+          rerenderUIs(['products']);
+        }
+      }, (e) => console.warn('Products snapshot err:', e)));
+
+      const shiftsRef = firestoreDb.collection('shifts');
+      activeFirestoreUnsubs.push(shiftsRef.onSnapshot((snap) => {
+        if (!snap || snap.empty) return;
+        const list = snap.docs.map(d => d.data()).filter(Boolean);
+        if (list.length === 0) return;
+        shiftsHistory = list;
+        saveToStorage(STORAGE_KEYS.SHIFTS, shiftsHistory, true);
+        const h = fastHash(shiftsHistory);
+        if (lastDataHash.shifts !== h) {
+          lastDataHash.shifts = h;
+          rerenderUIs(['shifts']);
+        }
+      }, (e) => console.warn('Shifts snapshot err:', e)));
+
+      let salesRetried = false;
+      const attachSalesSnapshot = (useOrder) => {
+        let ref = firestoreDb.collection('sales');
+        if (useOrder) {
+          try {
+            ref = ref.orderBy('date', 'desc').limit(50);
+          } catch (e) { useOrder = false; }
+        }
+        activeFirestoreUnsubs.push(ref.onSnapshot((snap) => {
+          if (!snap || snap.empty) return;
+          let list = snap.docs.map(d => d.data()).filter(Boolean);
+          if (list.length === 0) return;
+          list.sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+          salesHistory = list;
+          saveToStorage(STORAGE_KEYS.SALES, salesHistory, true);
+          const h = fastHash(salesHistory);
+          if (lastDataHash.sales !== h) {
+            lastDataHash.sales = h;
+            rerenderUIs(['sales']);
+          }
+        }, (e) => {
+          console.warn('Sales snapshot err:', e);
+          if (!salesRetried && (e.code === 'failed-precondition' || e.message.includes('index'))) {
+            salesRetried = true;
+            attachSalesSnapshot(false);
+          }
+        }));
+      };
+      attachSalesSnapshot(true);
+
+      if (currentUser) {
+        const logoDoc = firestoreDb.collection('settings').doc('logo');
+        activeFirestoreUnsubs.push(logoDoc.onSnapshot((snap) => {
+          if (!snap || !snap.exists || !snap.data().dataUrl) return;
+          const url = snap.data().dataUrl;
+          saveToStorage(STORAGE_KEYS.LOGO, url, true);
+          const h = fastHash(url);
+          if (lastDataHash.logo !== h) {
+            lastDataHash.logo = h;
+            rerenderUIs(['logo']);
+          }
+        }, (e) => console.warn('Logo snapshot err:', e)));
+      }
+    } catch (e) {
+      console.warn('Firestore snapshots failed:', e);
+    }
+  };
+
+  if (typeof firebaseAuth !== 'undefined' && firebaseAuth) {
+    const attempt = () => isFirestoreReady ? startFirestoreSnapshots() : setTimeout(attempt, 500);
+    attempt();
+  } else if (isFirestoreReady) {
+    startFirestoreSnapshots();
+  } else {
+    setTimeout(startFirestoreSnapshots, 1500);
+  }
 }
 
 function initFirebase() {
@@ -1825,4 +2059,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   renderGlobalFooter();
+
+  lastDataHash.products = fastHash(products);
+  lastDataHash.sales = fastHash(salesHistory);
+  lastDataHash.shifts = fastHash(shiftsHistory);
+  lastDataHash.logo = fastHash(loadFromStorage(STORAGE_KEYS.LOGO, null));
+  lastDataHash.auth = fastHash(currentUser);
+
+  registerRealtimeListeners();
 });
