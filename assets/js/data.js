@@ -31,16 +31,17 @@ const initialProducts = [
 ];
 
 const BUSINESS_INFO = {
-  name: "Eghale Cold Room",
+  name: "EGHALE COLD ROOM",
   parent: "Edekere Richmond Sons and Ventures",
-  address: "[Pending - Owner will provide address]",
-  phone: "[Pending - +234 XXX XXX XXXX]",
-  phone2: "[Pending - +234 XXX XXX XXXX]",
-  email: "[Pending - owner@email.com]",
-  whatsapp: "[Pending - WhatsApp line]",
-  website: "[Pending]",
-  manager: "[Pending - Manager Name]",
-  tagline: "Fresh Chicken & Fish - Always Quality",
+  address: "Agbarha-Otor, Delta State",
+  phone: "070 5022 8692",
+  phone2: "090 4767 7921",
+  phone3: "081 3965 9994",
+  email: "",
+  whatsapp: "070 5022 8692",
+  website: "",
+  manager: "",
+  tagline: "FRESHNESS YOU CAN TRUST. QUALITY YOU CAN TASTE!",
   tagline2: "Home of Affordable Frozen Foods",
   brandColors: {
     red: "#D32F2F",
@@ -48,11 +49,14 @@ const BUSINESS_INFO = {
     green: "#388E3C"
   },
   logoPath: "assets/img/eghalecrlogo.png",
-  bankInfo: {
-    name: "[Pending - Bank Name]",
-    account: "[Pending - Account Number]",
-    accountName: "Edekere Richmond Sons & Ventures"
-  }
+  marketingBullets: [
+    "🐔 Premium Broilers & Eggs",
+    "🥩 Frozen Chicken & Turkey",
+    "🐟 Fresh & Frozen Fish Varieties",
+    "🧊 Ice Blocks Available",
+    "🚚 Nationwide Delivery Available",
+    "💰 Discounts on Bulk Purchase"
+  ]
 };
 
 const ADMIN_DEFAULTS = {

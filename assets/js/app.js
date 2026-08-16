@@ -1269,8 +1269,8 @@ function showShiftSummary(shiftId) {
                   </div>
                 </div>
               </div>
-              <div class="mt-2 text-center small text-muted" style="line-height:1.5">
-                📍 ${info.address} · 📞 ${info.phone}${info.phone2 && !info.phone2.includes('Pending') ? ` · 📱 ${info.phone2}` : ''}${info.manager && !info.manager.includes('Pending') ? ` · 👤 ${info.manager}` : ''}
+              <div class="mt-2 text-center small text-muted" style="line-height:1.55">
+                📍 ${info.address} · 📞 ${info.phone}${info.phone2 ? ` · 📞 ${info.phone2}` : ''}${info.phone3 ? ` · 📞 ${info.phone3}` : ''}
               </div>
             </div>
             <div class="row g-3 mb-4">
@@ -1351,8 +1351,8 @@ function printShiftSummary(shiftId) {
   <div class="tagline-box"><span class="bar" style="background:#D32F2F"></span>${info.tagline}<span class="bar" style="background:#388E3C"></span></div>
   </div></div>
   <div class="contact center">
-    📍 ${info.address} &nbsp;|&nbsp; 📞 ${info.phone}${info.phone2 && !info.phone2.includes('Pending') ? ` &nbsp;|&nbsp; 📱 ${info.phone2}` : ''}<br>
-    ${info.email && !info.email.includes('Pending') ? `✉️ ${info.email} &nbsp;|&nbsp; ` : ''}${info.manager && !info.manager.includes('Pending') ? `👤 ${info.manager}` : ''}
+    📍 ${info.address}<br>
+    📞 Call/WhatsApp: ${info.phone}${info.phone2 ? ` · 📞 ${info.phone2}` : ''}${info.phone3 ? ` · 📞 ${info.phone3}` : ''}
   </div>
   <h3>📊 SHIFT CLOSING REPORT</h3>
   <div class="divider"></div>
@@ -1377,9 +1377,9 @@ function printShiftSummary(shiftId) {
     <div class="right" style="color:${(shift.totals.cashDifference || 0) < 0 ? 'red' : '#388E3C'};font-size:13px;border-top:1px dashed #ccc;padding-top:6px;margin-top:6px"><span style="display:inline-block;min-width:120px">Δ DIFFERENCE:</span> <strong>${formatCurrency(shift.totals.cashDifference || 0)}</strong></div>
   </div>
   <div class="footer">
-    <p style="margin:4px 0;font-weight:600">${info.tagline2}</p>
-    <p style="margin:4px 0">${info.tagline} · Thank you!</p>
-    <p style="margin:4px 0;font-style:italic;color:#666">Powered by Eghale Cold Room POS</p>
+    ${info.marketingBullets && info.marketingBullets.length ? `<p style="margin:4px 0;line-height:1.6">${info.marketingBullets.slice(0,4).join(' · ')}</p>` : ''}
+    <p style="margin:4px 0">${info.tagline}</p>
+    <p style="margin:4px 0;font-style:italic;color:#666">${info.parent}</p>
   </div>
   </body></html>`);
   w.document.close();
@@ -1591,6 +1591,36 @@ function setupLogoUpload() {
   });
 }
 
+function renderGlobalFooter() {
+  const root = document.getElementById('globalFooter');
+  if (!root) return;
+  const info = BUSINESS_INFO;
+  const logoSrc = getLogoSrc();
+  const numbers = [info.phone, info.phone2, info.phone3].filter(Boolean);
+  const wa = info.whatsapp || info.phone;
+  const waLink = wa ? `https://wa.me/${wa.replace(/\D+/g, '')}` : null;
+  root.innerHTML = `
+    <div class="global-footer-inner">
+      <div class="global-footer-logo">
+        <img src="${logoSrc}" alt="${info.name} Logo" onerror="this.outerHTML='<div style=&quot;font-size:28px&quot;>🏪</div>'">
+        <h3>${info.name}</h3>
+      </div>
+      <div class="global-footer-tagline">✨ ${info.tagline} ✨</div>
+      ${info.marketingBullets && info.marketingBullets.length ? `
+      <div class="global-footer-marketing">
+        ${info.marketingBullets.map(m => `<span>${m}</span>`).join('')}
+      </div>` : ''}
+      <div class="global-footer-contact">
+        <div class="contact-line">📍 ${info.address}</div>
+        ${numbers.slice(0,1).map(n => `<div class="contact-line">📞 <a href="tel:${n.replace(/\D+/g,'')}">${n}</a></div>`).join('')}
+        ${numbers.slice(1).map(n => `<div class="contact-line">📞 <a href="tel:${n.replace(/\D+/g,'')}">${n}</a></div>`).join('')}
+        ${waLink ? `<div class="contact-line">💬 <a href="${waLink}" target="_blank" rel="noopener">WhatsApp ${wa}</a></div>` : ''}
+      </div>
+      <div class="global-footer-parent">© ${new Date().getFullYear()} · A subsidiary of ${info.parent} · All rights reserved.</div>
+    </div>
+  `;
+}
+
 function renderReceipt() {
   const sale = getLastSale();
   const container = document.getElementById('receiptContent');
@@ -1622,13 +1652,12 @@ function renderReceipt() {
           <span style="height:3px;width:30px;background:#388E3C;border-radius:3px;"></span>
         </div>
         <p style="margin:3px 0;font-size:0.82rem;">${info.tagline2}</p>
-        <div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-size:0.82rem;color:#333;line-height:1.55;">
+        <div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-size:0.82rem;color:#333;line-height:1.6;">
           <div>📍 ${info.address}</div>
-          <div>📞 ${info.phone}</div>
-          ${info.phone2 && !info.phone2.includes('Pending') ? `<div>📱 ${info.phone2}</div>` : ''}
-          ${info.whatsapp && !info.whatsapp.includes('Pending') ? `<div>💬 ${info.whatsapp}</div>` : ''}
-          ${info.email && !info.email.includes('Pending') ? `<div>✉️ ${info.email}</div>` : ''}
-          ${info.manager && !info.manager.includes('Pending') ? `<div>👤 ${info.manager}</div>` : ''}
+          <div>📞 Call/WhatsApp: ${info.phone}</div>
+          ${info.phone2 ? `<div>📞 ${info.phone2}</div>` : ''}
+          ${info.phone3 ? `<div>📞 ${info.phone3}</div>` : ''}
+          ${info.email ? `<div>✉️ ${info.email}</div>` : ''}
         </div>
         <div style="border-top:1px dashed #333;margin-top:10px;padding-top:10px;">
           <div style="font-size:0.85rem;"><strong>Invoice #:</strong> ${sale.id}</div>
@@ -1666,11 +1695,9 @@ function renderReceipt() {
         <div style="font-size:1.25rem;">TOTAL: ${formatCurrency(sale.total)}</div>
       </div>
 
-      ${info.bankInfo && !info.bankInfo.name.includes('Pending') ? `
-      <div style="border-top:1px dashed #ccc;border-bottom:1px dashed #ccc;padding:8px 0;margin:10px 0;font-size:0.78rem;color:#444;text-align:center;">
-        <strong>🏦 Bank Transfer Details:</strong><br>
-        ${info.bankInfo.name} · Acct: ${info.bankInfo.account}<br>
-        <em>${info.bankInfo.accountName}</em>
+      ${info.marketingBullets && info.marketingBullets.length ? `
+      <div style="border-top:1px dashed #ccc;border-bottom:1px dashed #ccc;padding:8px 6px;margin:10px 0;font-size:0.78rem;color:#444;text-align:center;line-height:1.7;">
+        ${info.marketingBullets.map(m => `<span>${m}</span>`).join(' · ')}
       </div>` : ''}
 
       <div class="receipt-footer">
@@ -1768,4 +1795,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (document.getElementById('receiptContent')) {
     renderReceipt();
   }
+
+  renderGlobalFooter();
 });
