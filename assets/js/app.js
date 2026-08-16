@@ -221,9 +221,24 @@ async function loadShiftsFromFirestore() {
 }
 
 async function onAuthStateChange() {
-  if (!firebaseAuth) return Promise.resolve(null);
+  if (!firebaseAuth) return Promise.resolve(loadFromStorage(STORAGE_KEYS.AUTH_USER, null));
   return new Promise((resolve) => {
     let resolved = false;
+    let firstFiredWithNull = false;
+    const fastTimer = setTimeout(() => {
+      if (!resolved && firstFiredWithNull) {
+        const stored = loadFromStorage(STORAGE_KEYS.AUTH_USER, null);
+        if (firebaseAuth.currentUser) {
+          resolved = true;
+          clearTimeout(timer);
+          resolve(firebaseAuth.currentUser);
+        } else if (stored) {
+          resolved = true;
+          clearTimeout(timer);
+          resolve(stored);
+        }
+      }
+    }, 350);
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
@@ -237,15 +252,17 @@ async function onAuthStateChange() {
     }, 2500);
 
     firebaseAuth.onAuthStateChanged((user) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        currentUser = user;
-        if (user) {
-          saveToStorage(STORAGE_KEYS.AUTH_USER, { uid: user.uid, email: user.email });
-        }
-        resolve(user);
+      if (resolved) return;
+      if (!user) {
+        firstFiredWithNull = true;
+        return;
       }
+      resolved = true;
+      clearTimeout(timer);
+      clearTimeout(fastTimer);
+      currentUser = user;
+      saveToStorage(STORAGE_KEYS.AUTH_USER, { uid: user.uid, email: user.email });
+      resolve(user);
     });
   });
 }
@@ -275,10 +292,21 @@ async function checkAuth(required = false) {
 async function requireAdminAuth() {
   const user = await checkAuth();
   if (!user) {
+    const lastRedirect = parseInt(sessionStorage.getItem('er_last_auth_redirect') || '0', 10);
+    if (lastRedirect && Date.now() - lastRedirect < 1500) {
+      sessionStorage.removeItem('er_last_auth_redirect');
+      const fallback = loadFromStorage(STORAGE_KEYS.AUTH_USER, null);
+      if (fallback) {
+        currentUser = fallback;
+        return true;
+      }
+    }
+    sessionStorage.setItem('er_last_auth_redirect', String(Date.now()));
     const redirect = encodeURIComponent(window.location.pathname.split('/').pop() || 'admin.html');
     window.location.href = 'login.html?redirect=' + redirect;
     return false;
   }
+  sessionStorage.removeItem('er_last_auth_redirect');
   return true;
 }
 
