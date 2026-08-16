@@ -1242,6 +1242,8 @@ function renderShiftsHistory() {
 function showShiftSummary(shiftId) {
   const shift = shiftsHistory.find(s => s.id === shiftId);
   if (!shift) return;
+  const info = BUSINESS_INFO;
+  const logoHtml = getLogoHtml(56);
   const breakdown = Object.values(shift.productBreakdown).sort((a,b) => b.quantitySold - a.quantitySold);
   const html = `
     <div class="modal fade" id="shiftSummaryModal" tabindex="-1" aria-hidden="true">
@@ -1252,6 +1254,25 @@ function showShiftSummary(shiftId) {
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body p-4">
+            <div class="p-3 mb-3 rounded" style="background:linear-gradient(135deg, #f5f9ff 0%, #fff7f7 100%);border:1px solid #e1e9f0">
+              <div class="d-flex align-items-center justify-content-center gap-3 flex-wrap text-center">
+                <div class="d-flex align-items-center gap-3">
+                  ${logoHtml}
+                  <div class="text-start">
+                    <div style="font-weight:700;color:#1976D2;font-size:1.05rem">${info.name}</div>
+                    <div class="text-muted small fst-italic">${info.parent}</div>
+                    <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
+                      <span style="height:3px;width:22px;background:#D32F2F;border-radius:3px;"></span>
+                      <small style="font-size:0.72rem;font-weight:600;color:#1976D2">${info.tagline}</small>
+                      <span style="height:3px;width:22px;background:#388E3C;border-radius:3px;"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 text-center small text-muted" style="line-height:1.5">
+                📍 ${info.address} · 📞 ${info.phone}${info.phone2 && !info.phone2.includes('Pending') ? ` · 📱 ${info.phone2}` : ''}${info.manager && !info.manager.includes('Pending') ? ` · 👤 ${info.manager}` : ''}
+              </div>
+            </div>
             <div class="row g-3 mb-4">
               <div class="col-4"><div class="p-3 bg-light rounded text-center"><small class="text-muted">Opened</small><div class="fw-bold">${formatTime(shift.openedAt)}</div></div></div>
               <div class="col-4"><div class="p-3 bg-light rounded text-center"><small class="text-muted">Closed</small><div class="fw-bold">${formatTime(shift.closedAt)}</div></div></div>
@@ -1299,34 +1320,66 @@ function showShiftSummary(shiftId) {
 function printShiftSummary(shiftId) {
   const shift = shiftsHistory.find(s => s.id === shiftId);
   if (!shift) return;
+  const info = BUSINESS_INFO;
   const breakdown = Object.values(shift.productBreakdown).sort((a,b) => b.quantitySold - a.quantitySold);
+  const logoSrc = getLogoSrc();
   const w = window.open('', '', 'width=480,height=700');
   w.document.write(`<!DOCTYPE html><html><head><title>Shift Report ${formatDateShort(shift.openedAt)}</title>
-  <style>body{font-family:Courier New,monospace;padding:20px;font-size:12px}h1{font-size:18px;text-align:center;margin:0}h2{font-size:14px;text-align:center;margin:4px 0 16px;border-bottom:2px dashed #333;padding-bottom:8px}table{width:100%;border-collapse:collapse}th,td{padding:4px 2px;border-bottom:1px dotted #ccc;text-align:left}th{border-bottom:2px solid #333}.total{border-top:2px dashed #333;padding-top:10px;margin-top:10px;font-weight:bold;font-size:14px}.right{text-align:right}</style></head><body>
-  <h1>${BUSINESS_INFO.name}</h1><h2>${BUSINESS_INFO.parent}</h2>
-  <h3 style="text-align:center;font-size:15px;margin:16px 0 8px">📊 SHIFT CLOSING REPORT</h3>
-  <div style="border-top:1px dashed #333;border-bottom:1px dashed #333;padding:8px 0;margin-bottom:12px">
-    <div><strong>Date:</strong> ${formatDateShort(shift.openedAt)}</div>
-    <div><strong>Opened:</strong> ${formatTime(shift.openedAt)}</div>
-    <div><strong>Closed:</strong> ${formatTime(shift.closedAt)}</div>
-    <div><strong>Opened by:</strong> ${shift.openedBy || 'Admin'}</div>
+  <style>
+    body{font-family:Courier New,monospace;padding:20px;font-size:12px;color:#222}
+    h1{font-size:18px;text-align:center;margin:6px 0 0 0;letter-spacing:0.3px}
+    h2{font-size:12px;text-align:center;margin:4px 0 4px;color:#444;font-weight:normal;font-style:italic}
+    h3{text-align:center;font-size:15px;margin:16px 0 8px}
+    .header-row{display:flex;align-items:center;justify-content:center;gap:12px}
+    .header-row img{max-width:64px;max-height:64px;object-fit:contain;border-radius:6px}
+    .divider{border-top:2px dashed #333;margin:8px 0}
+    .tagline-box{display:flex;align-items:center;justify-content:center;gap:8px;margin:6px 0;font-size:11px;font-weight:600;color:#1976D2}
+    .bar{height:3px;width:30px;border-radius:3px}
+    .contact{font-size:11px;color:#333;line-height:1.5;margin:4px 0}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th,td{padding:5px 3px;border-bottom:1px dotted #bbb;text-align:left;font-size:11px}
+    th{border-bottom:2px solid #333;background:#f8f9fa;font-size:11px}
+    .right{text-align:right}
+    .center{text-align:center}
+    .total{border-top:2px dashed #333;padding-top:10px;margin-top:10px;font-weight:bold;font-size:13px}
+    .footer{text-align:center;margin-top:22px;padding-top:10px;border-top:2px dashed #333;font-size:11px;color:#444}
+    .summary-box{background:#f8f9fa;padding:8px;border-radius:6px;margin:6px 0}
+  </style></head><body>
+  <div class="header-row"><img src="${logoSrc}" alt="Logo" onerror="this.outerHTML='<div style=&quot;font-size:36px&quot;>🏪</div>'">
+  <div>
+  <h1>${info.name}</h1><h2>${info.parent}</h2>
+  <div class="tagline-box"><span class="bar" style="background:#D32F2F"></span>${info.tagline}<span class="bar" style="background:#388E3C"></span></div>
+  </div></div>
+  <div class="contact center">
+    📍 ${info.address} &nbsp;|&nbsp; 📞 ${info.phone}${info.phone2 && !info.phone2.includes('Pending') ? ` &nbsp;|&nbsp; 📱 ${info.phone2}` : ''}<br>
+    ${info.email && !info.email.includes('Pending') ? `✉️ ${info.email} &nbsp;|&nbsp; ` : ''}${info.manager && !info.manager.includes('Pending') ? `👤 ${info.manager}` : ''}
   </div>
-  <table><thead><tr><th>ITEM</th><th>QTY</th><th class="right">PRICE</th><th class="right">TOTAL</th></tr></thead><tbody>
-  ${breakdown.map(p => `<tr><td>${p.name}</td><td>${p.quantitySold} ${p.unit}</td><td class="right">${formatCurrency(p.price)}</td><td class="right">${formatCurrency(p.totalRevenue)}</td></tr>`).join('')}
+  <h3>📊 SHIFT CLOSING REPORT</h3>
+  <div class="divider"></div>
+  <div class="summary-box">
+    <div><strong>Date:</strong> ${formatDateShort(shift.openedAt)} &nbsp;|&nbsp; <strong>Opened:</strong> ${formatTime(shift.openedAt)} &nbsp;|&nbsp; <strong>Closed:</strong> ${formatTime(shift.closedAt)}</div>
+    <div><strong>Opened by:</strong> ${shift.openedBy || 'Admin'}${shift.closedBy ? ` &nbsp;|&nbsp; <strong>Closed by:</strong> ${shift.closedBy}` : ''}</div>
+    ${shift.salesIds.length ? `<div><strong>Sales IDs:</strong> ${shift.salesIds.slice(0,5).join(', ')}${shift.salesIds.length>5?` (+${shift.salesIds.length-5} more)`:''}</div>`:''}
+  </div>
+  <div class="divider"></div>
+  <table><thead><tr><th>ITEM</th><th class="center">QTY</th><th class="right">PRICE</th><th class="right">TOTAL</th></tr></thead><tbody>
+  ${breakdown.length === 0 ? '<tr><td colspan="4" class="center" style="padding:10px;color:#888">No sales recorded this shift</td></tr>' :
+    breakdown.map(p => `<tr><td>${p.name}</td><td class="center">${p.quantitySold} ${p.unit}</td><td class="right">${formatCurrency(p.price)}</td><td class="right">${formatCurrency(p.totalRevenue)}</td></tr>`).join('')}
   </tbody></table>
   <div class="total">
-    <div class="right">TRANSACTIONS: ${shift.totals.transactions}</div>
-    <div class="right">CHICKEN: ${formatCurrency(shift.totals.chickenRevenue)}</div>
-    <div class="right">FISH: ${formatCurrency(shift.totals.fishRevenue)}</div>
-    <div class="right" style="font-size:16px;border-top:1px dashed #333;margin-top:6px;padding-top:6px">TOTAL: ${formatCurrency(shift.totals.totalRevenue)}</div>
-    <div class="right" style="margin-top:10px">OPENING CASH: ${formatCurrency(shift.openingCash)}</div>
-    <div class="right">EXPECTED CASH: ${formatCurrency(shift.totals.expectedCash || 0)}</div>
-    <div class="right">ACTUAL CASH: ${formatCurrency(shift.closingCash)}</div>
-    <div class="right" style="color:${(shift.totals.cashDifference || 0) < 0 ? 'red' : 'green'}">DIFFERENCE: ${formatCurrency(shift.totals.cashDifference || 0)}</div>
+    <div class="right"><span style="display:inline-block;min-width:120px">TRANSACTIONS:</span> ${shift.totals.transactions}</div>
+    <div class="right"><span style="display:inline-block;min-width:120px;color:#D32F2F">🐔 CHICKEN:</span> ${formatCurrency(shift.totals.chickenRevenue)}</div>
+    <div class="right"><span style="display:inline-block;min-width:120px;color:#1976D2">🐟 FISH:</span> ${formatCurrency(shift.totals.fishRevenue)}</div>
+    <div class="right" style="font-size:16px;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span style="display:inline-block;min-width:120px">TOTAL:</span> <strong>${formatCurrency(shift.totals.totalRevenue)}</strong></div>
+    <div class="right" style="margin-top:10px"><span style="display:inline-block;min-width:120px">OPENING CASH:</span> ${formatCurrency(shift.openingCash)}</div>
+    <div class="right"><span style="display:inline-block;min-width:120px">EXPECTED:</span> ${formatCurrency(shift.totals.expectedCash || 0)}</div>
+    <div class="right"><span style="display:inline-block;min-width:120px">ACTUAL CASH:</span> ${formatCurrency(shift.closingCash)}</div>
+    <div class="right" style="color:${(shift.totals.cashDifference || 0) < 0 ? 'red' : '#388E3C'};font-size:13px;border-top:1px dashed #ccc;padding-top:6px;margin-top:6px"><span style="display:inline-block;min-width:120px">Δ DIFFERENCE:</span> <strong>${formatCurrency(shift.totals.cashDifference || 0)}</strong></div>
   </div>
-  <div style="text-align:center;margin-top:20px;border-top:1px dashed #333;padding-top:12px;font-size:11px">
-    <p>Thank you - ${BUSINESS_INFO.tagline}</p>
-    <p style="font-style:italic">Powered by Eghale Cold Room POS</p>
+  <div class="footer">
+    <p style="margin:4px 0;font-weight:600">${info.tagline2}</p>
+    <p style="margin:4px 0">${info.tagline} · Thank you!</p>
+    <p style="margin:4px 0;font-style:italic;color:#666">Powered by Eghale Cold Room POS</p>
   </div>
   </body></html>`);
   w.document.close();
@@ -1471,6 +1524,25 @@ function confirmDelete(id) {
   }
 }
 
+function getDefaultLogo() {
+  try {
+    return BUSINESS_INFO.logoPath || 'assets/img/eghalecrlogo.png';
+  } catch (e) {
+    return 'assets/img/eghalecrlogo.png';
+  }
+}
+
+function getLogoHtml(size = 80) {
+  const custom = loadFromStorage(STORAGE_KEYS.LOGO, null);
+  const defaultLogo = getDefaultLogo();
+  const src = custom || defaultLogo;
+  return `<img src="${src}" alt="${BUSINESS_INFO.name} Logo" style="max-width:${size}px;max-height:${size}px;object-fit:contain;border-radius:8px;" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div style=font-size:${Math.round(size/1.5)}px>🏪</div>');">`;
+}
+
+function getLogoSrc() {
+  return loadFromStorage(STORAGE_KEYS.LOGO, null) || getDefaultLogo();
+}
+
 function saveLogo(dataUrl) {
   saveToStorage(STORAGE_KEYS.LOGO, dataUrl);
   if (isFirestoreReady && currentUser && isOnline) {
@@ -1488,7 +1560,7 @@ function loadLogo() {
       if (doc.exists && doc.data().dataUrl) {
         saveLogo(doc.data().dataUrl);
         const el = document.getElementById('logoUpload');
-        if (el) el.innerHTML = `<img src="${doc.data().dataUrl}" alt="Logo">`;
+        if (el) el.innerHTML = `<img src="${doc.data().dataUrl}" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;">`;
       }
     }).catch(console.warn);
   }
@@ -1501,9 +1573,8 @@ function setupLogoUpload() {
   if (!logoUpload || !logoInput) return;
 
   const savedLogo = loadLogo();
-  if (savedLogo) {
-    logoUpload.innerHTML = `<img src="${savedLogo}" alt="Logo">`;
-  }
+  const src = savedLogo || getDefaultLogo();
+  logoUpload.innerHTML = `<img src="${src}" alt="${BUSINESS_INFO.name} Logo" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;" onerror="this.outerHTML='🏪'">`;
 
   logoUpload.addEventListener('click', () => logoInput.click());
   logoInput.addEventListener('change', (e) => {
@@ -1513,7 +1584,7 @@ function setupLogoUpload() {
       reader.onload = (event) => {
         const dataUrl = event.target.result;
         saveLogo(dataUrl);
-        logoUpload.innerHTML = `<img src="${dataUrl}" alt="Logo">`;
+        logoUpload.innerHTML = `<img src="${dataUrl}" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;">`;
       };
       reader.readAsDataURL(file);
     }
@@ -1536,18 +1607,29 @@ function renderReceipt() {
     return;
   }
 
-  const logo = loadLogo();
-  const logoHtml = logo ? `<img src="${logo}" alt="Logo" style="max-width:80px;max-height:80px;margin-bottom:10px;border-radius:8px;">` : '<div style="font-size:40px;">🏪</div>';
+  const info = BUSINESS_INFO;
+  const logoHtml = getLogoHtml(80);
 
   container.innerHTML = `
     <div class="receipt-container" id="receiptPrint">
       <div class="receipt-header">
         ${logoHtml}
-        <h2>${BUSINESS_INFO.name}</h2>
-        <div class="parent-name">${BUSINESS_INFO.parent}</div>
-        <p style="margin:5px 0;font-size:0.85rem;">${BUSINESS_INFO.tagline}</p>
-        <p style="margin:5px 0;font-size:0.85rem;">${BUSINESS_INFO.address}</p>
-        <p style="margin:5px 0;font-size:0.85rem;">${BUSINESS_INFO.phone}</p>
+        <h2 style="font-size:1.4rem;margin-top:6px;">${info.name}</h2>
+        <div class="parent-name">${info.parent}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin:6px 0 4px 0;">
+          <span style="height:3px;width:30px;background:#D32F2F;border-radius:3px;"></span>
+          <p style="margin:0;font-size:0.82rem;font-weight:600;color:#1976D2;">${info.tagline}</p>
+          <span style="height:3px;width:30px;background:#388E3C;border-radius:3px;"></span>
+        </div>
+        <p style="margin:3px 0;font-size:0.82rem;">${info.tagline2}</p>
+        <div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-size:0.82rem;color:#333;line-height:1.55;">
+          <div>📍 ${info.address}</div>
+          <div>📞 ${info.phone}</div>
+          ${info.phone2 && !info.phone2.includes('Pending') ? `<div>📱 ${info.phone2}</div>` : ''}
+          ${info.whatsapp && !info.whatsapp.includes('Pending') ? `<div>💬 ${info.whatsapp}</div>` : ''}
+          ${info.email && !info.email.includes('Pending') ? `<div>✉️ ${info.email}</div>` : ''}
+          ${info.manager && !info.manager.includes('Pending') ? `<div>👤 ${info.manager}</div>` : ''}
+        </div>
         <div style="border-top:1px dashed #333;margin-top:10px;padding-top:10px;">
           <div style="font-size:0.85rem;"><strong>Invoice #:</strong> ${sale.id}</div>
           <div style="font-size:0.85rem;"><strong>Date:</strong> ${formatDate(sale.date)}</div>
@@ -1576,12 +1658,23 @@ function renderReceipt() {
         </tbody>
       </table>
 
-      <div class="receipt-total" style="text-align:right">
-        <div>TOTAL: ${formatCurrency(sale.total)}</div>
+      <div style="font-size:0.82rem;color:#555;padding:4px 0;border-top:1px dashed #ccc;margin-top:4px;">
+        <div style="display:flex;justify-content:space-between;"><span>Items Sold:</span><strong>${sale.items.reduce((s,i)=>s+i.quantity,0)}</strong></div>
       </div>
 
+      <div class="receipt-total" style="text-align:right">
+        <div style="font-size:1.25rem;">TOTAL: ${formatCurrency(sale.total)}</div>
+      </div>
+
+      ${info.bankInfo && !info.bankInfo.name.includes('Pending') ? `
+      <div style="border-top:1px dashed #ccc;border-bottom:1px dashed #ccc;padding:8px 0;margin:10px 0;font-size:0.78rem;color:#444;text-align:center;">
+        <strong>🏦 Bank Transfer Details:</strong><br>
+        ${info.bankInfo.name} · Acct: ${info.bankInfo.account}<br>
+        <em>${info.bankInfo.accountName}</em>
+      </div>` : ''}
+
       <div class="receipt-footer">
-        <p style="margin:5px 0;">Thank you for your patronage!</p>
+        <p style="margin:5px 0;font-weight:600;">Thank you for your patronage!</p>
         <p style="margin:5px 0;">Please come again 🙏</p>
         <p style="margin:10px 0 0 0;font-style:italic;">Powered by Eghale Cold Room POS</p>
       </div>

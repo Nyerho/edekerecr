@@ -33,13 +33,25 @@ const initialProducts = [
 const BUSINESS_INFO = {
   name: "Eghale Cold Room",
   parent: "Edekere Richmond Sons and Ventures",
-  address: "Cold Room Outlet",
-  phone: "Contact Us Today!",
+  address: "[Pending - Owner will provide address]",
+  phone: "[Pending - +234 XXX XXX XXXX]",
+  phone2: "[Pending - +234 XXX XXX XXXX]",
+  email: "[Pending - owner@email.com]",
+  whatsapp: "[Pending - WhatsApp line]",
+  website: "[Pending]",
+  manager: "[Pending - Manager Name]",
   tagline: "Fresh Chicken & Fish - Always Quality",
+  tagline2: "Home of Affordable Frozen Foods",
   brandColors: {
     red: "#D32F2F",
     blue: "#1976D2",
     green: "#388E3C"
+  },
+  logoPath: "assets/img/eghalecrlogo.png",
+  bankInfo: {
+    name: "[Pending - Bank Name]",
+    account: "[Pending - Account Number]",
+    accountName: "Edekere Richmond Sons & Ventures"
   }
 };
 
