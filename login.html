@@ -32,10 +32,10 @@
 
       <form id="loginForm" novalidate>
         <div class="mb-3">
-          <label for="loginEmail" class="form-label">Email Address</label>
+          <label for="loginEmail" class="form-label fw-semibold">Admin Email</label>
           <div class="input-group">
             <span class="input-group-text">📧</span>
-            <input type="email" class="form-control form-control-lg" id="loginEmail" placeholder="admin@edekerecr.com" required autocomplete="email">
+            <input type="email" class="form-control form-control-lg" id="loginEmail" placeholder="Enter your admin email" required autocomplete="email">
           </div>
         </div>
 
@@ -58,16 +58,6 @@
           <span id="loginBtnText">🔓 Sign In</span>
         </button>
       </form>
-
-      <div class="mt-4 p-3 rounded-3" style="background:linear-gradient(135deg,#f8f9fa,#e9ecef);">
-        <small class="d-flex align-items-start gap-2 text-muted">
-          <span>💡</span>
-          <span>
-            <strong>Firebase Login:</strong> Use admin email registered in Firebase Console.<br>
-            <strong>Offline Mode:</strong> Use <code>admin@edekerecr.com</code> / <code>Eghale2024!</code>
-          </span>
-        </small>
-      </div>
 
       <div class="text-center mt-4">
         <a href="index.html" class="text-decoration-none small" style="color:var(--brand-blue)">
@@ -204,7 +194,7 @@
             } else if (err.code === 'auth/invalid-email') {
               msg = 'Please enter a valid email address.';
             } else if (err.code === 'auth/network-request-failed') {
-              msg = 'Network error. Check your connection or use offline: admin@edekerecr.com / Eghale2024!';
+              msg = 'Network error. Please check your internet connection and try again.';
             } else if (err.code === 'auth/invalid-login-credentials') {
               msg = 'Invalid login credentials.';
             }
@@ -215,7 +205,7 @@
         } else {
           setTimeout(() => {
             if (!fallbackLogin(email, password)) {
-              showError('Invalid email or password. Offline mode: admin@edekerecr.com / Eghale2024!');
+              showError('Invalid email or password.');
               setLoading(false);
             }
           }, 500);
