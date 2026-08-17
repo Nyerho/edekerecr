@@ -447,6 +447,14 @@ body {
   background-image: linear-gradient(135deg, rgba(211, 47, 47, 0.07) 0%, transparent 55%);
 }
 
+.turkey-card {
+  border-left: 5px solid #E65100;
+  background-image: linear-gradient(135deg, rgba(230, 81, 0, 0.03) 0%, transparent 50%);
+}
+.turkey-card:hover {
+  background-image: linear-gradient(135deg, rgba(230, 81, 0, 0.08) 0%, transparent 55%);
+}
+
 .fish-card {
   border-left: 5px solid var(--brand-blue);
   background-image: linear-gradient(135deg, rgba(25, 118, 210, 0.03) 0%, transparent 50%);

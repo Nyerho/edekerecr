@@ -15,8 +15,11 @@ const STORAGE_KEYS = {
   SALES: 'er_sales',
   SHIFTS: 'er_shifts',
   LOGO: 'er_logo',
-  AUTH_USER: 'er_auth_user'
+  AUTH_USER: 'er_auth_user',
+  PRODUCTS_UPDATED_AT: 'er_products_updated_at'
 };
+
+let lastProductsUpdatedAt = Number(localStorage.getItem(STORAGE_KEYS.PRODUCTS_UPDATED_AT) || '0') || 0;
 
 function formatCurrency(amount) {
   return '₦' + amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -215,8 +218,23 @@ function registerRealtimeListeners() {
       const prodsRef = firestoreDb.collection('products');
       activeFirestoreUnsubs.push(prodsRef.onSnapshot((snap) => {
         if (!snap || snap.empty) return;
-        const list = snap.docs.map(d => ({ id: Number(d.id) || d.id, ...d.data() })).filter(Boolean);
+        let snapNewest = 0;
+        const list = snap.docs.map(d => {
+          const dt = d.data() || {};
+          const upd = Number(dt.updatedAt) || 0;
+          if (upd > snapNewest) snapNewest = upd;
+          return { id: Number(d.id) || d.id, ...dt };
+        }).filter(Boolean);
         if (list.length === 0) return;
+        if (lastProductsUpdatedAt > 0 && snapNewest > 0 && lastProductsUpdatedAt > snapNewest) {
+          console.warn(`[SNAPSHOT PROTECT] Local newer than snapshot. Resyncing local to cloud.`);
+          syncProductsToFirestore();
+          return;
+        }
+        if (snapNewest > 0) {
+          lastProductsUpdatedAt = Math.max(lastProductsUpdatedAt, snapNewest);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS_UPDATED_AT, String(lastProductsUpdatedAt));
+        }
         products = list;
         saveToStorage(STORAGE_KEYS.PRODUCTS, products, true);
         const h = fastHash(products);
@@ -349,9 +367,10 @@ async function syncProductsToFirestore() {
   try {
     const batch = firestoreDb.batch();
     const productsRef = firestoreDb.collection('products');
+    const now = lastProductsUpdatedAt || Date.now();
     for (const p of products) {
       const ref = productsRef.doc(String(p.id));
-      batch.set(ref, { ...p, updatedAt: new Date() }, { merge: true });
+      batch.set(ref, { ...p, updatedAt: now, updatedAtStr: new Date(now).toISOString() }, { merge: true });
     }
     await batch.commit();
     return true;
@@ -420,18 +439,33 @@ async function loadProductsFromFirestore() {
     const snapshot = await firestoreDb.collection('products').get();
     if (snapshot.empty) return null;
     const loaded = [];
+    let firestoreNewest = 0;
     snapshot.forEach(doc => {
       const data = doc.data();
+      const fsUpdated = Number(data.updatedAt) || 0;
+      if (fsUpdated > firestoreNewest) firestoreNewest = fsUpdated;
       loaded.push({
         id: typeof data.id === 'number' ? data.id : parseInt(doc.id),
         name: data.name,
         category: data.category,
         price: Number(data.price),
         unit: data.unit,
-        stock: Number(data.stock)
+        stock: Number(data.stock),
+        _updatedAt: fsUpdated
       });
     });
-    return loaded.sort((a, b) => a.id - b.id);
+    const sortedLoaded = loaded.sort((a, b) => a.id - b.id);
+
+    if (lastProductsUpdatedAt > 0 && firestoreNewest > 0 && lastProductsUpdatedAt > firestoreNewest) {
+      console.warn(`[STOCK PROTECT] Local products NEWER (${new Date(lastProductsUpdatedAt).toLocaleTimeString()}) than Firestore (${new Date(firestoreNewest).toLocaleTimeString()}). Skipping overwrite and pushing local to cloud.`);
+      syncProductsToFirestore();
+      return products;
+    }
+    if (firestoreNewest > 0) {
+      lastProductsUpdatedAt = Math.max(lastProductsUpdatedAt, firestoreNewest);
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS_UPDATED_AT, String(lastProductsUpdatedAt));
+    }
+    return sortedLoaded;
   } catch (e) {
     console.warn('Load products from Firestore failed:', e);
     return null;
@@ -620,8 +654,12 @@ function initShifts() {
   return shiftsHistory;
 }
 
-function saveProducts() {
-  saveToStorage(STORAGE_KEYS.PRODUCTS, products);
+function saveProducts(updateTimestamp = true) {
+  if (updateTimestamp) {
+    lastProductsUpdatedAt = Date.now();
+    localStorage.setItem(STORAGE_KEYS.PRODUCTS_UPDATED_AT, String(lastProductsUpdatedAt));
+  }
+  saveToStorage(STORAGE_KEYS.PRODUCTS, products, updateTimestamp ? false : true);
   if (currentUser) syncProductsToFirestore();
 }
 
@@ -655,6 +693,7 @@ function openShift(openingCash = 0) {
       totalSales: 0,
       totalRevenue: 0,
       chickenRevenue: 0,
+      turkeyRevenue: 0,
       fishRevenue: 0,
       itemsSold: 0,
       transactions: 0
@@ -687,6 +726,8 @@ function recordSaleInShift(sale) {
     const product = getProductById(item.productId);
     if (product?.category === 'Chicken') {
       shift.totals.chickenRevenue += revenue;
+    } else if (product?.category === 'Turkey') {
+      shift.totals.turkeyRevenue += revenue;
     } else if (product?.category === 'Fish') {
       shift.totals.fishRevenue += revenue;
     }
@@ -841,7 +882,7 @@ function isShiftOpenRequired() {
   return { open: true };
 }
 
-function completeSale() {
+function completeSale(extra = {}) {
   if (cart.length === 0) return null;
 
   const shiftCheck = isShiftOpenRequired();
@@ -866,14 +907,30 @@ function completeSale() {
     const product = getProductById(item.productId);
     product.stock -= item.quantity;
   }
-  saveProducts();
+  saveProducts(true);
+
+  const itemsCount = cart.length;
+  const unitsSold = cart.reduce((s, i) => s + i.quantity, 0);
+  const customer = (extra.customer || null);
+  const paymentMethod = (extra.paymentMethod || null);
+  const amountTendered = (extra.amountTendered != null ? Number(extra.amountTendered) : null);
+  const changeDue = (extra.changeDue != null ? Number(extra.changeDue) : null);
+  const notes = (extra.notes || null);
+  const total = calculateTotal();
 
   const sale = {
     id: 'INV-' + Date.now(),
     date: new Date().toISOString(),
     shiftId: getActiveShift()?.id || null,
     items: JSON.parse(JSON.stringify(cart)),
-    total: calculateTotal()
+    itemsCount,
+    unitsSold,
+    total,
+    customer,
+    paymentMethod,
+    amountTendered,
+    changeDue,
+    notes
   };
 
   salesHistory.unshift(sale);
@@ -959,8 +1016,8 @@ function renderProducts(category) {
   if (!container) return;
 
   const filteredProducts = category ? getProductsByCategory(category) : products;
-  const icon = category === 'Chicken' ? '🐔' : category === 'Fish' ? '🐟' : '📦';
-  const cardClass = category === 'Chicken' ? 'chicken-card' : category === 'Fish' ? 'fish-card' : '';
+  const icon = category === 'Chicken' ? '🐔' : category === 'Turkey' ? '🦃' : category === 'Fish' ? '🐟' : '📦';
+  const cardClass = category === 'Chicken' ? 'chicken-card' : category === 'Turkey' ? 'turkey-card' : category === 'Fish' ? 'fish-card' : '';
 
   if (filteredProducts.length === 0) {
     container.innerHTML = `
@@ -1167,9 +1224,21 @@ function addFromModalToCart() {
   currentProduct = null;
 }
 
-function handleCompleteSale() {
-  if (cart.length === 0) {
-    alert('Your cart is empty!');
+function updateChangeCalculation() {
+  const total = calculateTotal();
+  const tenderedInput = document.getElementById('cpTendered');
+  const changeEl = document.getElementById('cpChange');
+  if (!tenderedInput || !changeEl) return;
+  const tendered = Number(tenderedInput.value) || 0;
+  const change = tendered > total ? (tendered - total) : 0;
+  changeEl.textContent = formatCurrency(change);
+  changeEl.style.color = tendered > 0 && tendered < total ? '#d32f2f' : '#388E3C';
+}
+
+function openConfirmPaymentModal() {
+  const modalEl = document.getElementById('confirmPaymentModal');
+  if (!modalEl) {
+    handleCompleteSaleDirect(false);
     return;
   }
   const shiftCheck = isShiftOpenRequired();
@@ -1177,30 +1246,115 @@ function handleCompleteSale() {
     alert(shiftCheck.message);
     return;
   }
+  if (cart.length === 0) {
+    alert('Your cart is empty!');
+    return;
+  }
 
-  const sale = completeSale();
+  const total = calculateTotal();
+  const itemsCount = cart.length;
+  const unitsSold = cart.reduce((s, i) => s + i.quantity, 0);
+  document.getElementById('cpItemsCount').textContent = String(itemsCount);
+  document.getElementById('cpUnitsCount').textContent = String(unitsSold);
+  document.getElementById('cpTotalDue').textContent = formatCurrency(total);
+  document.getElementById('cpCustomerName').value = '';
+  document.getElementById('cpCustomerPhone').value = '';
+  document.getElementById('cpPaymentMethod').value = 'Cash';
+  document.getElementById('cpTendered').value = '';
+  document.getElementById('cpNotes').value = '';
+  document.getElementById('cpChange').textContent = formatCurrency(0);
+  document.getElementById('cpChange').style.color = '#388E3C';
+
+  try {
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  } catch (e) {
+    handleCompleteSaleDirect(false);
+  }
+}
+
+function confirmPaymentAndContinue(shouldPrint) {
+  const shiftCheck = isShiftOpenRequired();
+  if (!shiftCheck.open) {
+    alert(shiftCheck.message);
+    return;
+  }
+  if (cart.length === 0) {
+    alert('Your cart is empty!');
+    return;
+  }
+  const nameEl = document.getElementById('cpCustomerName');
+  const phoneEl = document.getElementById('cpCustomerPhone');
+  const methodEl = document.getElementById('cpPaymentMethod');
+  const tenderedEl = document.getElementById('cpTendered');
+  const notesEl = document.getElementById('cpNotes');
+  const total = calculateTotal();
+  const customer = {
+    name: (nameEl?.value || '').trim() || 'Walk-in Customer',
+    phone: (phoneEl?.value || '').trim() || null
+  };
+  if (!customer.name || customer.name.toLowerCase() === 'walk-in customer') {
+    customer.name = 'Walk-in Customer';
+  }
+  const paymentMethod = (methodEl?.value || 'Cash');
+  const amountTendered = tenderedEl && tenderedEl.value ? Number(tenderedEl.value) : null;
+  const changeDue = (amountTendered != null && amountTendered >= total) ? (amountTendered - total) : null;
+  const notes = (notesEl?.value || '').trim() || null;
+
+  try {
+    const modalEl = document.getElementById('confirmPaymentModal');
+    if (modalEl && bootstrap?.Modal?.getInstance) {
+      bootstrap.Modal.getInstance(modalEl)?.hide();
+    }
+  } catch (e) {}
+
+  const extra = { customer, paymentMethod, amountTendered, changeDue, notes };
+  const sale = completeSale(extra);
   if (sale) {
     clearCart();
     renderCart();
     updateCartCount();
-    window.location.href = 'receipt.html';
+    const url = 'receipt.html' + (shouldPrint ? '?autoPrint=1' : '');
+    setTimeout(() => { window.location.href = url; }, 150);
   }
 }
 
-function handlePrintReceipt() {
-  if (cart.length === 0) {
-    alert('Your cart is empty!');
-    return;
-  }
+function handleCompleteSaleDirect(shouldPrint) {
   const shiftCheck = isShiftOpenRequired();
   if (!shiftCheck.open) {
     alert(shiftCheck.message);
     return;
   }
-  const sale = completeSale();
+  if (cart.length === 0) {
+    alert('Your cart is empty!');
+    return;
+  }
+  const extra = {
+    customer: { name: 'Walk-in Customer', phone: null },
+    paymentMethod: 'Cash'
+  };
+  const sale = completeSale(extra);
   if (sale) {
     clearCart();
-    window.location.href = 'receipt.html?autoPrint=1';
+    renderCart();
+    updateCartCount();
+    window.location.href = 'receipt.html' + (shouldPrint ? '?autoPrint=1' : '');
+  }
+}
+
+function handleCompleteSale() {
+  if (document.getElementById('confirmPaymentModal')) {
+    openConfirmPaymentModal();
+  } else {
+    handleCompleteSaleDirect(false);
+  }
+}
+
+function handlePrintReceipt() {
+  if (document.getElementById('confirmPaymentModal')) {
+    openConfirmPaymentModal();
+  } else {
+    handleCompleteSaleDirect(true);
   }
 }
 
@@ -1539,8 +1693,9 @@ function showShiftSummary(shiftId) {
               <div class="col-4"><div class="p-3 bg-light rounded text-center"><small class="text-muted">Opened</small><div class="fw-bold">${formatTime(shift.openedAt)}</div></div></div>
               <div class="col-4"><div class="p-3 bg-light rounded text-center"><small class="text-muted">Closed</small><div class="fw-bold">${formatTime(shift.closedAt)}</div></div></div>
               <div class="col-4"><div class="p-3 bg-light rounded text-center"><small class="text-muted">Transactions</small><div class="fw-bold text-primary">${shift.totals.transactions}</div></div></div>
-              <div class="col-6"><div class="p-3 rounded text-center" style="background:linear-gradient(135deg,rgba(25,118,210,0.08),transparent)"><small class="text-muted">Chicken Revenue</small><div class="fw-bold" style="color:#D32F2F">${formatCurrency(shift.totals.chickenRevenue)}</div></div></div>
-              <div class="col-6"><div class="p-3 rounded text-center" style="background:linear-gradient(135deg,rgba(56,142,60,0.08),transparent)"><small class="text-muted">Fish Revenue</small><div class="fw-bold" style="color:#1976D2">${formatCurrency(shift.totals.fishRevenue)}</div></div></div>
+              <div class="col-4"><div class="p-3 rounded text-center" style="background:linear-gradient(135deg,rgba(25,118,210,0.08),transparent)"><small class="text-muted">Chicken Revenue</small><div class="fw-bold" style="color:#D32F2F">${formatCurrency(shift.totals.chickenRevenue)}</div></div></div>
+              <div class="col-4"><div class="p-3 rounded text-center" style="background:linear-gradient(135deg,rgba(230,81,0,0.08),transparent)"><small class="text-muted">Turkey Revenue</small><div class="fw-bold" style="color:#E65100">${formatCurrency(shift.totals.turkeyRevenue || 0)}</div></div></div>
+              <div class="col-4"><div class="p-3 rounded text-center" style="background:linear-gradient(135deg,rgba(56,142,60,0.08),transparent)"><small class="text-muted">Fish Revenue</small><div class="fw-bold" style="color:#1976D2">${formatCurrency(shift.totals.fishRevenue)}</div></div></div>
             </div>
             <div class="p-3 mb-3 rounded-3 gradient-bg text-center text-white">
               <h4 class="mb-0">TOTAL REVENUE: ${formatCurrency(shift.totals.totalRevenue)}</h4>
@@ -1554,7 +1709,7 @@ function showShiftSummary(shiftId) {
                   ${breakdown.length === 0 ? '<tr><td colspan="4" class="text-center py-3 text-muted">No sales recorded this shift</td></tr>' :
                     breakdown.map(p => `
                     <tr>
-                      <td>${p.category === 'Chicken' ? '🐔' : '🐟'} <span class="fw-semibold">${p.name}</span></td>
+                      <td>${p.category === 'Chicken' ? '🐔' : p.category === 'Turkey' ? '🦃' : '🐟'} <span class="fw-semibold">${p.name}</span></td>
                       <td><span class="badge bg-primary">${p.quantitySold} ${p.unit}</span></td>
                       <td class="text-end">${formatCurrency(p.price)}</td>
                       <td class="text-end fw-bold text-success">${formatCurrency(p.totalRevenue)}</td>
@@ -1631,6 +1786,7 @@ function printShiftSummary(shiftId) {
   <div class="total">
     <div class="right"><span style="display:inline-block;min-width:120px">TRANSACTIONS:</span> ${shift.totals.transactions}</div>
     <div class="right"><span style="display:inline-block;min-width:120px;color:#D32F2F">🐔 CHICKEN:</span> ${formatCurrency(shift.totals.chickenRevenue)}</div>
+    <div class="right"><span style="display:inline-block;min-width:120px;color:#E65100">🦃 TURKEY:</span> ${formatCurrency(shift.totals.turkeyRevenue || 0)}</div>
     <div class="right"><span style="display:inline-block;min-width:120px;color:#1976D2">🐟 FISH:</span> ${formatCurrency(shift.totals.fishRevenue)}</div>
     <div class="right" style="font-size:16px;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span style="display:inline-block;min-width:120px">TOTAL:</span> <strong>${formatCurrency(shift.totals.totalRevenue)}</strong></div>
     <div class="right" style="margin-top:10px"><span style="display:inline-block;min-width:120px">OPENING CASH:</span> ${formatCurrency(shift.openingCash)}</div>
@@ -1709,6 +1865,8 @@ function renderAllAdminUI() {
   document.getElementById('statLowStock').textContent = products.filter(p => p.stock < 5).length;
   document.getElementById('statFish').textContent = products.filter(p => p.category === 'Fish').length;
   document.getElementById('statChicken').textContent = products.filter(p => p.category === 'Chicken').length;
+  const turkeyEl = document.getElementById('statTurkey');
+  if (turkeyEl) turkeyEl.textContent = products.filter(p => p.category === 'Turkey').length;
   renderActiveShiftCard();
   renderAnalytics();
   renderShiftsHistory();
@@ -1901,6 +2059,17 @@ function renderReceipt() {
 
   const info = BUSINESS_INFO;
   const logoHtml = getLogoHtml(80);
+  const unitsSold = sale.unitsSold != null ? sale.unitsSold : sale.items.reduce((s,i)=>s+i.quantity,0);
+  const itemsCount = sale.itemsCount != null ? sale.itemsCount : sale.items.length;
+  const customer = sale.customer || { name: 'Walk-in Customer', phone: null };
+  const custName = customer.name || 'Walk-in Customer';
+  const custPhone = customer.phone || null;
+
+  const methodBadge = (sale.paymentMethod === 'Cash') ? '💵 Cash'
+    : (sale.paymentMethod === 'Bank Transfer') ? '🏦 Bank Transfer'
+    : (sale.paymentMethod === 'POS') ? '💳 POS'
+    : (sale.paymentMethod === 'Credit') ? '📝 Credit (Later)'
+    : (sale.paymentMethod || '💵 Cash');
 
   container.innerHTML = `
     <div class="receipt-container" id="receiptPrint">
@@ -1926,6 +2095,21 @@ function renderReceipt() {
           <div style="font-size:0.85rem;"><strong>Date:</strong> ${formatDate(sale.date)}</div>
           ${sale.shiftId ? `<div style="font-size:0.85rem;"><strong>Shift:</strong> ${sale.shiftId}</div>` : ''}
         </div>
+
+        <div style="border-top:1px dashed #333;border-bottom:1px dashed #333;margin-top:10px;padding:10px 6px;background:linear-gradient(135deg,#f1f8e9,#ffffff);border-radius:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:0.86rem;text-align:left;flex:1 1 auto;">
+              <strong>🧑 Customer:</strong> <span style="color:#1976D2;font-weight:600">${custName}</span>
+              ${custPhone ? `<br>📞 ${custPhone}` : ''}
+            </div>
+            <div style="font-size:0.86rem;text-align:right;flex:1 1 auto;">
+              <span class="badge" style="background:linear-gradient(135deg,#1976D2,#0D47A1);color:#fff;padding:4px 10px;font-size:0.75rem;font-weight:600;border-radius:20px;">
+                ${methodBadge}
+              </span>
+              <div style="margin-top:4px;"><strong>Items:</strong> ${itemsCount} · <strong>Pcs:</strong> ${unitsSold}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <table class="receipt-table">
@@ -1950,12 +2134,16 @@ function renderReceipt() {
       </table>
 
       <div style="font-size:0.82rem;color:#555;padding:4px 0;border-top:1px dashed #ccc;margin-top:4px;">
-        <div style="display:flex;justify-content:space-between;"><span>Items Sold:</span><strong>${sale.items.reduce((s,i)=>s+i.quantity,0)}</strong></div>
+        <div style="display:flex;justify-content:space-between;"><span>Items Sold:</span><strong>${unitsSold}</strong></div>
+        ${sale.amountTendered != null ? `<div style="display:flex;justify-content:space-between;"><span>Amount Tendered:</span><strong>${formatCurrency(Number(sale.amountTendered))}</strong></div>` : ''}
+        ${sale.changeDue != null && Number(sale.changeDue) > 0 ? `<div style="display:flex;justify-content:space-between;"><span style="color:#d32f2f;font-weight:500">Change Due:</span><strong style="color:#d32f2f">${formatCurrency(Number(sale.changeDue))}</strong></div>` : ''}
       </div>
 
       <div class="receipt-total" style="text-align:right">
         <div style="font-size:1.25rem;">TOTAL: ${formatCurrency(sale.total)}</div>
       </div>
+
+      ${sale.notes ? `<div style="border-top:1px dashed #999;border-bottom:1px dashed #999;margin:10px 0;padding:8px 6px;font-size:0.8rem;color:#455A64;background:#fffde7;border-radius:4px;"><strong>📝 Notes:</strong> ${sale.notes}</div>` : ''}
 
       ${info.marketingBullets && info.marketingBullets.length ? `
       <div style="border-top:1px dashed #ccc;border-bottom:1px dashed #ccc;padding:8px 6px;margin:10px 0;font-size:0.78rem;color:#444;text-align:center;line-height:1.7;">
@@ -1963,8 +2151,8 @@ function renderReceipt() {
       </div>` : ''}
 
       <div class="receipt-footer">
-        <p style="margin:5px 0;font-weight:600;">Thank you for your patronage!</p>
-        <p style="margin:5px 0;">Please come again 🙏</p>
+        <p style="margin:5px 0;font-weight:600;">Thank you for your patronage, ${custName}! 🙏</p>
+        <p style="margin:5px 0;">Please come again</p>
         <p style="margin:10px 0 0 0;font-style:italic;">Powered by Eghale Cold Room POS</p>
       </div>
     </div>
@@ -2026,6 +2214,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderProducts('Chicken');
 
     const tabChicken = document.getElementById('tab-chicken');
+    const tabTurkey = document.getElementById('tab-turkey');
     const tabFish = document.getElementById('tab-fish');
     if (tabChicken) {
       tabChicken.addEventListener('click', (e) => {
@@ -2033,6 +2222,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.nav-tabs .nav-link').forEach(t => t.classList.remove('active'));
         tabChicken.classList.add('active');
         renderProducts('Chicken');
+      });
+    }
+    if (tabTurkey) {
+      tabTurkey.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.nav-tabs .nav-link').forEach(t => t.classList.remove('active'));
+        tabTurkey.classList.add('active');
+        renderProducts('Turkey');
       });
     }
     if (tabFish) {

@@ -77,11 +77,20 @@
         </div>
       </div>
       <div class="col-md-3">
-        <div class="card border-0 shadow-sm border-start border-danger border-5 stat-card">
+        <div class="card border-0 shadow-sm border-start border-5 stat-card" style="border-color:#D32F2F;">
           <div class="card-body text-center">
             <div class="display-4 mb-2" style="color:#D32F2F">🐔</div>
             <h3 class="mb-0" style="color:#D32F2F" id="statChicken">0</h3>
             <small class="text-muted">Chicken Products</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card border-0 shadow-sm border-start border-5 stat-card" style="border-color:#E65100;">
+          <div class="card-body text-center">
+            <div class="display-4 mb-2" style="color:#E65100">🦃</div>
+            <h3 class="mb-0" style="color:#E65100" id="statTurkey">0</h3>
+            <small class="text-muted">Turkey Products</small>
           </div>
         </div>
       </div>
@@ -258,6 +267,7 @@
               <label class="form-label fw-semibold">Category</label>
               <select class="form-select form-select-lg" id="productCategory" required>
                 <option value="Chicken">🐔 Chicken</option>
+                <option value="Turkey">🦃 Turkey</option>
                 <option value="Fish">🐟 Fish</option>
               </select>
             </div>

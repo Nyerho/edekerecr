@@ -49,6 +49,11 @@
             </button>
           </li>
           <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-turkey" type="button" role="tab">
+              🦃 Turkey Products
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-fish" type="button" role="tab">
               🐟 Fish Products
             </button>
@@ -127,6 +132,90 @@
           </button>
           <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">
             Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="confirmPaymentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+        <div class="modal-header gradient-bg text-white py-3">
+          <h5 class="modal-title fw-bold">
+            💰 Confirm Payment &amp; Issue Receipt
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="row g-4">
+            <div class="col-lg-6">
+              <h6 class="fw-bold text-primary mb-3">👤 Customer Details</h6>
+              <div class="mb-3">
+                <label for="cpCustomerName" class="form-label fw-semibold">Customer Name <small class="text-muted">(Optional)</small></label>
+                <div class="input-group">
+                  <span class="input-group-text">🧑</span>
+                  <input type="text" class="form-control form-control-lg" id="cpCustomerName" placeholder="e.g. Mr. John Okafor" autocomplete="name">
+                </div>
+              </div>
+              <div class="mb-3">
+                <label for="cpCustomerPhone" class="form-label fw-semibold">Phone Number <small class="text-muted">(Optional)</small></label>
+                <div class="input-group">
+                  <span class="input-group-text">📞</span>
+                  <input type="tel" class="form-control form-control-lg" id="cpCustomerPhone" placeholder="e.g. 070 5022 8692" autocomplete="tel">
+                </div>
+              </div>
+              <div class="mb-3">
+                <label for="cpPaymentMethod" class="form-label fw-semibold">Payment Method</label>
+                <select class="form-select form-select-lg" id="cpPaymentMethod">
+                  <option value="Cash">💵 Cash</option>
+                  <option value="Bank Transfer">🏦 Bank Transfer</option>
+                  <option value="POS">💳 POS / Card</option>
+                  <option value="Credit">📝 Credit (Later)</option>
+                </select>
+              </div>
+              <div class="mb-0">
+                <label for="cpNotes" class="form-label fw-semibold">Notes <small class="text-muted">(Optional)</small></label>
+                <textarea class="form-control" id="cpNotes" rows="2" placeholder="Delivery note, special request, etc."></textarea>
+              </div>
+            </div>
+
+            <div class="col-lg-6">
+              <h6 class="fw-bold text-primary mb-3">💵 Payment Summary</h6>
+              <div class="p-3 rounded-3 mb-3" style="background:linear-gradient(135deg,#f1f8e9,#ffffff);">
+                <div class="d-flex justify-content-between mb-2"><small class="text-muted">Items</small><span class="fw-semibold" id="cpItemsCount">0</span></div>
+                <div class="d-flex justify-content-between mb-2"><small class="text-muted">Units Sold</small><span class="fw-semibold" id="cpUnitsCount">0</span></div>
+                <div class="d-flex justify-content-between align-items-center pt-2 mt-2" style="border-top:1px dashed #c5e1a5;">
+                  <span class="fw-bold">TOTAL DUE:</span>
+                  <span class="fw-bold fs-2 text-success" id="cpTotalDue">₦0.00</span>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label for="cpTendered" class="form-label fw-semibold">Amount Tendered <small class="text-muted">(optional)</small></label>
+                <div class="input-group">
+                  <span class="input-group-text">₦</span>
+                  <input type="number" class="form-control form-control-lg" id="cpTendered" min="0" step="50" placeholder="0.00" oninput="updateChangeCalculation()">
+                </div>
+              </div>
+              <div class="p-3 bg-light rounded-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold">Change Due:</span>
+                  <span class="fw-bold fs-4" id="cpChange" style="color:#388E3C">₦0.00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer flex-column flex-sm-row gap-2 p-4 pt-0">
+          <button type="button" class="btn btn-secondary big-btn flex-grow-1" data-bs-dismiss="modal">
+            ← Cancel
+          </button>
+          <button type="button" class="btn btn-success big-btn flex-grow-1" id="cpBtnConfirm" onclick="confirmPaymentAndContinue(false)">
+            ✅ Confirm &amp; View Receipt
+          </button>
+          <button type="button" class="btn btn-primary big-btn flex-grow-1" id="cpBtnConfirmPrint" onclick="confirmPaymentAndContinue(true)">
+            🖨️ Confirm &amp; Print Receipt
           </button>
         </div>
       </div>
